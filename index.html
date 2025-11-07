@@ -11,6 +11,41 @@
       button { margin-top: .5rem; padding: .5rem 1rem; }
       .row { margin-bottom: .7rem; }
       label { font-weight: bold; }
+
+      /* preview styles */
+      #preview {
+        margin-top: 1rem;
+        display: flex;
+        gap: 1rem;
+        overflow-x: auto;
+      }
+      .bubble {
+        background: #fff;
+        border-radius: 18px;
+        box-shadow: 0 2px 8px rgba(0,0,0,.08);
+        width: 280px;
+        padding: 12px 14px 14px 14px;
+        flex: 0 0 auto;
+      }
+      .bubble-title {
+        font-weight: 600;
+        margin-bottom: 2px;
+      }
+      .bubble-date {
+        font-size: 12px;
+        color: #888;
+        margin-bottom: 6px;
+      }
+      .bubble-sep {
+        border-bottom: 1px solid #eee;
+        margin: 6px 0 6px 0;
+      }
+      .bubble-name {
+        font-size: 13px;
+        line-height: 1.35;
+        margin-bottom: 3px;
+        word-break: break-word;
+      }
     </style>
   </head>
   <body>
@@ -34,11 +69,17 @@
       <button id="btnShare">Share to LINE Target Picker</button>
     </div>
 
+    <!-- HTML preview of Flex -->
+    <div class="row">
+      <label>Preview (HTML mock):</label>
+      <div id="preview"></div>
+    </div>
+
     <!-- LINE LIFF SDK -->
     <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
     <script>
       // ====== CONFIG ======
-      const LIFF_ID = "2008438278-VElJ5r8b"; // TODO: put your LIFF ID here
+      const LIFF_ID = "2008438278-VElJ5r8b";
       const DAY_URL = "https://opensheet.elk.sh/1X2iwknZOpFErFyniArGdLCghwURp2Z3ERGMqlNSLPEI/schedule_day";
       const NIGHT_URL = "https://opensheet.elk.sh/1X2iwknZOpFErFyniArGdLCghwURp2Z3ERGMqlNSLPEI/schedule_night";
 
@@ -62,6 +103,9 @@
           const data = await res.json(); // array of rows
           const flex = buildFlexFromSheet(data);
           document.getElementById("flexOutput").value = JSON.stringify(flex, null, 2);
+
+          // render preview in HTML
+          renderFlex(flex);
         } catch (err) {
           alert("Fetch/build error: " + err);
         }
@@ -127,6 +171,50 @@
           type: "carousel",
           contents: bubbles
         };
+      }
+
+      // ====== HTML PREVIEW ======
+      function renderFlex(flex) {
+        const preview = document.getElementById("preview");
+        preview.innerHTML = "";
+
+        if (!flex || flex.type !== "carousel" || !Array.isArray(flex.contents)) {
+          preview.textContent = "No preview.";
+          return;
+        }
+
+        // show first up to 5 bubbles
+        flex.contents.slice(0, 5).forEach(bubble => {
+          const bubbleEl = document.createElement("div");
+          bubbleEl.className = "bubble";
+
+          // find contents in bubble.body
+          const body = bubble.body;
+          const contents = body?.contents || [];
+
+          // position
+          const title = contents.find(c => c.type === "text" && c.weight === "bold");
+          const date = contents.find(c => c.type === "text" && c.size === "xs");
+          const namesBox = contents.find(c => c.type === "box" && Array.isArray(c.contents));
+
+          bubbleEl.innerHTML = `
+            <div class="bubble-title">${title ? title.text : "ตำแหน่ง"}</div>
+            <div class="bubble-date">${date ? date.text : ""}</div>
+            <div class="bubble-sep"></div>
+          `;
+
+          // names
+          if (namesBox) {
+            namesBox.contents.forEach(n => {
+              const p = document.createElement("div");
+              p.className = "bubble-name";
+              p.textContent = n.text;
+              bubbleEl.appendChild(p);
+            });
+          }
+
+          preview.appendChild(bubbleEl);
+        });
       }
 
       // ====== SHARE ======
