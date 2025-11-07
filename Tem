@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8" />
+    <title>LINE Flex Auto from Sheet</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body { font-family: sans-serif; padding: 1rem; background: #f5f5f5; }
+      h1 { font-size: 1.1rem; margin-bottom: .5rem; }
+      textarea { width: 100%; height: 280px; font-family: monospace; }
+      button { margin-top: .5rem; padding: .5rem 1rem; }
+      .row { margin-bottom: .7rem; }
+      label { font-weight: bold; }
+    </style>
+  </head>
+  <body>
+    <h1>Duty Flex Generator <br/>(Sheet → Flex → Share)</h1>
+
+    <div class="row">
+      <label>Source:</label>
+      <select id="sourceSelect">
+        <option value="day">เวรเช้า (schedule_day)</option>
+        <option value="night">เวรเย็น (schedule_night)</option>
+      </select>
+      <button id="btnLoad">Load & Build Flex</button>
+    </div>
+
+    <div class="row">
+      <label>Generated Flex JSON:</label>
+      <textarea id="flexOutput" spellcheck="false"></textarea>
+    </div>
+
+    <div class="row">
+      <button id="btnShare">Share to LINE Target Picker</button>
+    </div>
+
+    <!-- LINE LIFF SDK -->
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    <script>
+      // ====== CONFIG ======
+      const LIFF_ID = "2008438278-VElJ5r8b"; // TODO: put your LIFF ID here
+      const DAY_URL = "https://opensheet.elk.sh/1X2iwknZOpFErFyniArGdLCghwURp2Z3ERGMqlNSLPEI/schedule_day";
+      const NIGHT_URL = "https://opensheet.elk.sh/1X2iwknZOpFErFyniArGdLCghwURp2Z3ERGMqlNSLPEI/schedule_night";
+
+      // ====== LIFF INIT ======
+      async function initLiff() {
+        try {
+          await liff.init({ liffId: LIFF_ID });
+          console.log("LIFF init OK");
+        } catch (err) {
+          console.warn("LIFF init failed (still can view JSON):", err);
+        }
+      }
+
+      // ====== FETCH & BUILD ======
+      async function loadAndBuild() {
+        const mode = document.getElementById("sourceSelect").value;
+        const url = mode === "day" ? DAY_URL : NIGHT_URL;
+
+        try {
+          const res = await fetch(url);
+          const data = await res.json(); // array of rows
+          const flex = buildFlexFromSheet(data);
+          document.getElementById("flexOutput").value = JSON.stringify(flex, null, 2);
+        } catch (err) {
+          alert("Fetch/build error: " + err);
+        }
+      }
+
+      // Build LINE Flex from your sheet data
+      function buildFlexFromSheet(rows) {
+        const bubbles = rows.map(row => {
+          const position = row["ตำแหน่ง"] || "ไม่ระบุตำแหน่ง";
+
+          // find the date-like key (anything that's not "ตำแหน่ง")
+          const dateKey = Object.keys(row).find(k => k !== "ตำแหน่ง") || "";
+          const dateText = row[dateKey] ? dateKey : "";
+
+          // split names by comma
+          const namesRaw = row[dateKey] || "";
+          const nameList = namesRaw.split(",").map(s => s.trim()).filter(Boolean);
+
+          const nameBoxes = nameList.map(nm => ({
+            type: "text",
+            text: nm,
+            size: "sm",
+            wrap: true
+          }));
+
+          return {
+            type: "bubble",
+            size: "mega",
+            body: {
+              type: "box",
+              layout: "vertical",
+              spacing: "sm",
+              contents: [
+                {
+                  type: "text",
+                  text: position,
+                  weight: "bold",
+                  size: "md"
+                },
+                {
+                  type: "text",
+                  text: dateText,
+                  size: "xs",
+                  color: "#888888",
+                  wrap: true
+                },
+                {
+                  type: "separator",
+                  margin: "sm"
+                },
+                {
+                  type: "box",
+                  layout: "vertical",
+                  spacing: "xs",
+                  contents: nameBoxes
+                }
+              ]
+            }
+          };
+        });
+
+        return {
+          type: "carousel",
+          contents: bubbles
+        };
+      }
+
+      // ====== SHARE ======
+      async function shareFlex() {
+        const raw = document.getElementById("flexOutput").value.trim();
+        if (!raw) {
+          alert("No JSON to share yet, Sir. Press 'Load & Build Flex' first.");
+          return;
+        }
+        let flexJson;
+        try {
+          flexJson = JSON.parse(raw);
+        } catch (err) {
+          alert("JSON not valid, Sir: " + err);
+          return;
+        }
+
+        if (!liff.isInClient()) {
+          alert("Please open in LINE app to use Target Picker.");
+          return;
+        }
+
+        try {
+          await liff.shareTargetPicker([
+            {
+              type: "flex",
+              altText: "ตารางเวร",
+              contents: flexJson
+            }
+          ]);
+        } catch (err) {
+          alert("Share failed: " + err);
+        }
+      }
+
+      // ====== EVENT BINDINGS ======
+      document.addEventListener("DOMContentLoaded", () => {
+        initLiff();
+        document.getElementById("btnLoad").addEventListener("click", loadAndBuild);
+        document.getElementById("btnShare").addEventListener("click", shareFlex);
+      });
+    </script>
+  </body>
+</html>
