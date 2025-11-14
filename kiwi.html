@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="th">
+  <head>
+    <meta charset="UTF-8" />
+    <title>LINE Flex Auto from Sheet</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body { font-family: sans-serif; padding: 1rem; background: #f5f5f5; }
+      h1 { font-size: 1.1rem; margin-bottom: .5rem; }
+      textarea { width: 100%; height: 280px; font-family: monospace; }
+      button { margin-top: .5rem; padding: .5rem 1rem; }
+      .row { margin-bottom: .7rem; }
+      label { font-weight: bold; }
+
+      /* preview styles */
+      #preview {
+        margin-top: 1rem;
+        display: flex;
+        gap: 1rem;
+        overflow-x: auto;
+      }
+      .bubble {
+        background: #fff;
+        border-radius: 18px;
+        box-shadow: 0 2px 8px rgba(0,0,0,.08);
+        width: 280px;
+        padding: 12px 14px 14px 14px;
+        flex: 0 0 auto;
+      }
+      .bubble-title {
+        font-weight: 600;
+        margin-bottom: 2px;
+      }
+      .bubble-date {
+        font-size: 12px;
+        color: #888;
+        margin-bottom: 6px;
+      }
+      .bubble-sep {
+        border-bottom: 1px solid #eee;
+        margin: 6px 0 6px 0;
+      }
+      .bubble-name {
+        font-size: 13px;
+        line-height: 1.35;
+        margin-bottom: 3px;
+        word-break: break-word;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Duty Flex Generator <br/>(Sheet → Flex → Share)</h1>
+
+    <div class="row">
+      <label>Source:</label>
+      <select id="sourceSelect">
+        <option value="day">เวรเช้า (KIWI_Version)</option>
+        <option value="night">เวรเย็น (KIWI_Version)</option>
+      </select>
+      <button id="btnLoad">Load & Build Flex</button>
+    </div>
+
+    <div class="row">
+      <label>Generated Flex JSON:</label>
+      <textarea id="flexOutput" spellcheck="false"></textarea>
+    </div>
+
+    <div class="row">
+      <button id="btnShare">Share to LINE Target Picker</button>
+    </div>
+
+    <!-- HTML preview of Flex -->
+    <div class="row">
+      <label>Preview (HTML mock):</label>
+      <div id="preview"></div>
+    </div>
+
+    <!-- LINE LIFF SDK -->
+    <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+    <script>
+      // ====== CONFIG ======
+      const LIFF_ID = "2008438278-VElJ5r8b";
+
+      // ใช้ API ใหม่ KIWI_Version ทั้งสองตัวเลือก (ชื่อใน select แค่ไว้แยกเฉย ๆ)
+      const DAY_URL   = "https://opensheet.elk.sh/1X2iwknZOpFErFyniArGdLCghwURp2Z3ERGMqlNSLPEI/KIWI_Version";
+      const NIGHT_URL = "https://opensheet.elk.sh/1X2iwknZOpFErFyniArGdLCghwURp2Z3ERGMqlNSLPEI/KIWI_Version";
+
+      // ====== LIFF INIT ======
+      async function initLiff() {
+        try {
+          await liff.init({ liffId: LIFF_ID });
+          console.log("LIFF init OK");
+        } catch (err) {
+          console.warn("LIFF init failed (still can view JSON):", err);
+        }
+      }
+
+      // ====== FETCH & BUILD ======
+      async function loadAndBuild() {
+        const mode = document.getElementById("sourceSelect").value;
+        const url = mode === "day" ? DAY_URL : NIGHT_URL;
+
+        try {
+          const res = await fetch(url);
+          const data = await res.json(); // array of rows
+          const flex = buildFlexFromSheet(data);
+          document.getElementById("flexOutput").value = JSON.stringify(flex, null, 2);
+
+          // render preview in HTML
+          renderFlex(flex);
+        } catch (err) {
+          alert("Fetch/build error: " + err);
+        }
+      }
+
+      // ====== BUILD FLEX FROM KIWI_VERSION DATA ======
+      function buildFlexFromSheet(rows) {
+        const bubbles = rows.map(row => {
+          const number   = row["ที่"] || "";
+          const name     = row["ชื่อ-สกุล"] || "ไม่ระบุชื่อ";
+          const position = row["ตำแหน่ง/กลุ่มสาระฯ"] || "";
+
+          // สร้างบรรทัด เดือน/วันที่ยืนเวร/ประจำจุด จากทุกคอลัมน์ที่ลงท้าย "วันที่ยืนเวร"
+          const monthLines = [];
+
+          Object.keys(row).forEach(key => {
+            if (key.endsWith("วันที่ยืนเวร")) {
+              const base = key.replace(" วันที่ยืนเวร", ""); // เช่น "เดือนธันวาคม 2568"
+              const date = row[key];
+              const pointKey = base + " ประจำจุด";
+              const point = row[pointKey];
+
+              // ข้ามถ้าเป็น "-" หรือว่าง
+              if (date && date !== "-" && point && point !== "-") {
+                monthLines.push(`${base} วันที่ ${date} (จุด ${point})`);
+              }
+            }
+          });
+
+          if (monthLines.length === 0) {
+            monthLines.push("ยังไม่มีเวรที่กำหนด");
+          }
+
+          const monthBoxes = monthLines.map(line => ({
+            type: "text",
+            text: line,
+            size: "sm",
+            wrap: true
+          }));
+
+          // ข้อความกำกับเพิ่มตามที่ Sir ขอ
+          const noteBoxes = [
+            {
+              type: "text",
+              text: "- กำหนดลงเวลาปฏิบัติหน้าที่เวรแต่ละจุด ไม่เกิน 07.00 น. และปฏิบัติหน้าที่เวรตอนเย็น 15.30-16.00 น.",
+              size: "xxs",
+              wrap: true,
+              color: "#666666",
+              margin: "md"
+            },
+            {
+              type: "text",
+              text: "- ปฏิบัติหน้าที่เวร แต่ละจุด จนถึงเวลา 07.50 น. จากนั้นให้ไปปฏิบัติครูที่ปรึกษาควบคุมดูแลแถวนักเรียนในกิจกรรมหน้าเสาธง",
+              size: "xxs",
+              wrap: true,
+              color: "#666666"
+            }
+          ];
+
+          const titleText = number ? `${number}. ${name}` : name;
+
+          return {
+            type: "bubble",
+            size: "mega",
+            body: {
+              type: "box",
+              layout: "vertical",
+              spacing: "sm",
+              contents: [
+                {
+                  type: "text",
+                  text: titleText,
+                  weight: "bold",
+                  size: "md",
+                  wrap: true
+                },
+                {
+                  type: "text",
+                  text: position,
+                  size: "xs",
+                  color: "#888888",
+                  wrap: true
+                },
+                {
+                  type: "separator",
+                  margin: "sm"
+                },
+                {
+                  type: "box",
+                  layout: "vertical",
+                  spacing: "xs",
+                  contents: [
+                    ...monthBoxes,
+                    ...noteBoxes
+                  ]
+                }
+              ]
+            }
+          };
+        });
+
+        return {
+          type: "carousel",
+          contents: bubbles
+        };
+      }
+
+      // ====== HTML PREVIEW ======
+      function renderFlex(flex) {
+        const preview = document.getElementById("preview");
+        preview.innerHTML = "";
+
+        if (!flex || flex.type !== "carousel" || !Array.isArray(flex.contents)) {
+          preview.textContent = "No preview.";
+          return;
+        }
+
+        // show first up to 5 bubbles
+        flex.contents.slice(0, 5).forEach(bubble => {
+          const bubbleEl = document.createElement("div");
+          bubbleEl.className = "bubble";
+
+          // find contents in bubble.body
+          const body = bubble.body;
+          const contents = body?.contents || [];
+
+          // title (ชื่อ+เลขที่)
+          const title = contents.find(c => c.type === "text" && c.weight === "bold");
+          // position
+          const date = contents.find(c => c.type === "text" && c.size === "xs");
+          // month & notes box
+          const namesBox = contents.find(c => c.type === "box" && Array.isArray(c.contents));
+
+          bubbleEl.innerHTML = `
+            <div class="bubble-title">${title ? title.text : "ชื่อ-สกุล"}</div>
+            <div class="bubble-date">${date ? date.text : ""}</div>
+            <div class="bubble-sep"></div>
+          `;
+
+          // month lines + note lines
+          if (namesBox) {
+            namesBox.contents.forEach(n => {
+              if (!n.text) return;
+              const p = document.createElement("div");
+              p.className = "bubble-name";
+              p.textContent = n.text;
+              bubbleEl.appendChild(p);
+            });
+          }
+
+          preview.appendChild(bubbleEl);
+        });
+      }
+
+      // ====== SHARE ======
+      async function shareFlex() {
+        const raw = document.getElementById("flexOutput").value.trim();
+        if (!raw) {
+          alert("No JSON to share yet, Sir. Press 'Load & Build Flex' first.");
+          return;
+        }
+        let flexJson;
+        try {
+          flexJson = JSON.parse(raw);
+        } catch (err) {
+          alert("JSON not valid, Sir: " + err);
+          return;
+        }
+
+        if (!liff.isInClient()) {
+          alert("Please open in LINE app to use Target Picker.");
+          return;
+        }
+
+        try {
+          await liff.shareTargetPicker([
+            {
+              type: "flex",
+              altText: "ตารางเวร",
+              contents: flexJson
+            }
+          ]);
+        } catch (err) {
+          alert("Share failed: " + err);
+        }
+      }
+
+      // ====== EVENT BINDINGS ======
+      document.addEventListener("DOMContentLoaded", () => {
+        initLiff();
+        document.getElementById("btnLoad").addEventListener("click", loadAndBuild);
+        document.getElementById("btnShare").addEventListener("click", shareFlex);
+      });
+    </script>
+  </body>
+</html>
