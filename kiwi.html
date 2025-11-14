@@ -51,12 +51,33 @@
   <body>
     <h1>Duty Flex Generator <br/>(Sheet → Flex → Share)</h1>
 
+    <!-- เลือกแหล่งข้อมูล (จริง ๆ ใช้ API เดียวกันทั้งคู่) -->
     <div class="row">
       <label>Source:</label>
       <select id="sourceSelect">
         <option value="day">เวรเช้า (KIWI_Version)</option>
         <option value="night">เวรเย็น (KIWI_Version)</option>
       </select>
+    </div>
+
+    <!-- เลือกเดือน -->
+    <div class="row">
+      <label>เลือกเดือน:</label>
+      <select id="monthSelect">
+        <option value="">-- เลือกเดือน --</option>
+        <option value="เดือนพฤศจิกายน 2568">เดือนพฤศจิกายน 2568</option>
+        <option value="เดือนธันวาคม 2568">เดือนธันวาคม 2568</option>
+        <option value="เดือนมกราคม 2569">เดือนมกราคม 2569</option>
+        <option value="เดือนกุมภาพันธ์ 2569">เดือนกุมภาพันธ์ 2569</option>
+        <option value="เดือนมีนาคม 2569">เดือนมีนาคม 2569</option>
+        <option value="เดือนเมษายน 2569">เดือนเมษายน 2569</option>
+      </select>
+    </div>
+
+    <!-- เลือกวันที่ -->
+    <div class="row">
+      <label>เลือกวันที่:</label>
+      <input type="number" id="dayInput" min="1" max="31" placeholder="เช่น 1" />
       <button id="btnLoad">Load & Build Flex</button>
     </div>
 
@@ -81,7 +102,7 @@
       // ====== CONFIG ======
       const LIFF_ID = "2008438278-VElJ5r8b";
 
-      // ใช้ API ใหม่ KIWI_Version ทั้งสองตัวเลือก (ชื่อใน select แค่ไว้แยกเฉย ๆ)
+      // ใช้ API ใหม่ KIWI_Version ทั้งสองตัวเลือก
       const DAY_URL   = "https://opensheet.elk.sh/1X2iwknZOpFErFyniArGdLCghwURp2Z3ERGMqlNSLPEI/KIWI_Version";
       const NIGHT_URL = "https://opensheet.elk.sh/1X2iwknZOpFErFyniArGdLCghwURp2Z3ERGMqlNSLPEI/KIWI_Version";
 
@@ -100,10 +121,22 @@
         const mode = document.getElementById("sourceSelect").value;
         const url = mode === "day" ? DAY_URL : NIGHT_URL;
 
+        const monthBase = document.getElementById("monthSelect").value;
+        const dayValRaw = document.getElementById("dayInput").value.trim();
+
+        if (!monthBase) {
+          alert("กรุณาเลือกเดือนก่อนนะครับ Sir");
+          return;
+        }
+        if (!dayValRaw) {
+          alert("กรุณากรอกวันที่ด้วยครับ Sir");
+          return;
+        }
+
         try {
           const res = await fetch(url);
           const data = await res.json(); // array of rows
-          const flex = buildFlexFromSheet(data);
+          const flex = buildFlexForDate(data, monthBase, dayValRaw);
           document.getElementById("flexOutput").value = JSON.stringify(flex, null, 2);
 
           // render preview in HTML
@@ -113,143 +146,130 @@
         }
       }
 
-      // ====== BUILD FLEX FROM KIWI_VERSION DATA ======
-      function buildFlexFromSheet(rows) {
-        const bubbles = rows.map(row => {
+      // ====== BUILD ONE BUBBLE FLEX FOR SELECTED DATE ======
+      function buildFlexForDate(rows, monthBase, dayVal) {
+        const dateCol  = monthBase + " วันที่ยืนเวร";
+        const pointCol = monthBase + " ประจำจุด";
+        const targetDay = String(dayVal); // เปรียบเทียบเป็น string
+
+        const dutyLines = [];
+
+        rows.forEach(row => {
+          const dateVal  = row[dateCol];
+          const pointVal = row[pointCol];
+
+          if (!dateVal || dateVal === "-" || !pointVal || pointVal === "-") return;
+          if (String(dateVal) !== targetDay) return;
+
           const number   = row["ที่"] || "";
           const name     = row["ชื่อ-สกุล"] || "ไม่ระบุชื่อ";
           const position = row["ตำแหน่ง/กลุ่มสาระฯ"] || "";
 
-          // สร้างบรรทัด เดือน/วันที่ยืนเวร/ประจำจุด จากทุกคอลัมน์ที่ลงท้าย "วันที่ยืนเวร"
-          const monthLines = [];
-
-          Object.keys(row).forEach(key => {
-            if (key.endsWith("วันที่ยืนเวร")) {
-              const base = key.replace(" วันที่ยืนเวร", ""); // เช่น "เดือนธันวาคม 2568"
-              const date = row[key];
-              const pointKey = base + " ประจำจุด";
-              const point = row[pointKey];
-
-              // ข้ามถ้าเป็น "-" หรือว่าง
-              if (date && date !== "-" && point && point !== "-") {
-                monthLines.push(`${base} วันที่ ${date} (จุด ${point})`);
-              }
-            }
-          });
-
-          if (monthLines.length === 0) {
-            monthLines.push("ยังไม่มีเวรที่กำหนด");
-          }
-
-          const monthBoxes = monthLines.map(line => ({
-            type: "text",
-            text: line,
-            size: "sm",
-            wrap: true
-          }));
-
-          // ข้อความกำกับเพิ่มตามที่ Sir ขอ
-          const noteBoxes = [
-            {
-              type: "text",
-              text: "- กำหนดลงเวลาปฏิบัติหน้าที่เวรแต่ละจุด ไม่เกิน 07.00 น. และปฏิบัติหน้าที่เวรตอนเย็น 15.30-16.00 น.",
-              size: "xxs",
-              wrap: true,
-              color: "#666666",
-              margin: "md"
-            },
-            {
-              type: "text",
-              text: "- ปฏิบัติหน้าที่เวร แต่ละจุด จนถึงเวลา 07.50 น. จากนั้นให้ไปปฏิบัติครูที่ปรึกษาควบคุมดูแลแถวนักเรียนในกิจกรรมหน้าเสาธง",
-              size: "xxs",
-              wrap: true,
-              color: "#666666"
-            }
-          ];
-
-          const titleText = number ? `${number}. ${name}` : name;
-
-          return {
-            type: "bubble",
-            size: "mega",
-            body: {
-              type: "box",
-              layout: "vertical",
-              spacing: "sm",
-              contents: [
-                {
-                  type: "text",
-                  text: titleText,
-                  weight: "bold",
-                  size: "md",
-                  wrap: true
-                },
-                {
-                  type: "text",
-                  text: position,
-                  size: "xs",
-                  color: "#888888",
-                  wrap: true
-                },
-                {
-                  type: "separator",
-                  margin: "sm"
-                },
-                {
-                  type: "box",
-                  layout: "vertical",
-                  spacing: "xs",
-                  contents: [
-                    ...monthBoxes,
-                    ...noteBoxes
-                  ]
-                }
-              ]
-            }
-          };
+          const prefix = number ? number + ". " : "";
+          dutyLines.push(`${prefix}${name} (${position}) จุด ${pointVal}`);
         });
 
-        return {
-          type: "carousel",
-          contents: bubbles
+        if (dutyLines.length === 0) {
+          dutyLines.push("ไม่มีผู้ปฏิบัติหน้าที่เวรในวันนี้");
+        }
+
+        const dutyBoxes = dutyLines.map(line => ({
+          type: "text",
+          text: line,
+          size: "sm",
+          wrap: true
+        }));
+
+        // ข้อความกำกับเพิ่มตามที่ Sir ขอ
+        const noteBoxes = [
+          {
+            type: "text",
+            text: "- กำหนดลงเวลาปฏิบัติหน้าที่เวรแต่ละจุด ไม่เกิน 07.00 น. และปฏิบัติหน้าที่เวรตอนเย็น 15.30-16.00 น.",
+            size: "xxs",
+            wrap: true,
+            color: "#666666",
+            margin: "md"
+          },
+          {
+            type: "text",
+            text: "- ปฏิบัติหน้าที่เวร แต่ละจุด จนถึงเวลา 07.50 น. จากนั้นให้ไปปฏิบัติครูที่ปรึกษาควบคุมดูแลแถวนักเรียนในกิจกรรมหน้าเสาธง",
+            size: "xxs",
+            wrap: true,
+            color: "#666666"
+          }
+        ];
+
+        const headerText = `ตารางเวร ${monthBase} วันที่ ${targetDay}`;
+
+        // ONE bubble (not carousel)
+        const bubble = {
+          type: "bubble",
+          size: "mega",
+          body: {
+            type: "box",
+            layout: "vertical",
+            spacing: "sm",
+            contents: [
+              {
+                type: "text",
+                text: headerText,
+                weight: "bold",
+                size: "md",
+                wrap: true
+              },
+              {
+                type: "separator",
+                margin: "sm"
+              },
+              {
+                type: "box",
+                layout: "vertical",
+                spacing: "xs",
+                contents: [
+                  ...dutyBoxes,
+                  ...noteBoxes
+                ]
+              }
+            ]
+          }
         };
+
+        return bubble;
       }
 
-      // ====== HTML PREVIEW ======
+      // ====== HTML PREVIEW (support bubble OR carousel) ======
       function renderFlex(flex) {
         const preview = document.getElementById("preview");
         preview.innerHTML = "";
 
-        if (!flex || flex.type !== "carousel" || !Array.isArray(flex.contents)) {
+        let bubbles = [];
+
+        if (flex && flex.type === "carousel" && Array.isArray(flex.contents)) {
+          bubbles = flex.contents;
+        } else if (flex && flex.type === "bubble") {
+          bubbles = [flex];
+        } else {
           preview.textContent = "No preview.";
           return;
         }
 
-        // show first up to 5 bubbles
-        flex.contents.slice(0, 5).forEach(bubble => {
+        bubbles.slice(0, 5).forEach(bubble => {
           const bubbleEl = document.createElement("div");
           bubbleEl.className = "bubble";
 
-          // find contents in bubble.body
-          const body = bubble.body;
-          const contents = body?.contents || [];
+          const body = bubble.body || {};
+          const contents = body.contents || [];
 
-          // title (ชื่อ+เลขที่)
           const title = contents.find(c => c.type === "text" && c.weight === "bold");
-          // position
-          const date = contents.find(c => c.type === "text" && c.size === "xs");
-          // month & notes box
-          const namesBox = contents.find(c => c.type === "box" && Array.isArray(c.contents));
+          const detailBox = contents.find(c => c.type === "box" && Array.isArray(c.contents));
 
           bubbleEl.innerHTML = `
-            <div class="bubble-title">${title ? title.text : "ชื่อ-สกุล"}</div>
-            <div class="bubble-date">${date ? date.text : ""}</div>
+            <div class="bubble-title">${title ? title.text : "ตารางเวร"}</div>
             <div class="bubble-sep"></div>
           `;
 
-          // month lines + note lines
-          if (namesBox) {
-            namesBox.contents.forEach(n => {
+          if (detailBox) {
+            detailBox.contents.forEach(n => {
               if (!n.text) return;
               const p = document.createElement("div");
               p.className = "bubble-name";
