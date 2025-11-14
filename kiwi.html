@@ -31,11 +31,6 @@
         font-weight: 600;
         margin-bottom: 2px;
       }
-      .bubble-date {
-        font-size: 12px;
-        color: #888;
-        margin-bottom: 6px;
-      }
       .bubble-sep {
         border-bottom: 1px solid #eee;
         margin: 6px 0 6px 0;
@@ -106,12 +101,12 @@
       const DAY_URL   = "https://opensheet.elk.sh/1X2iwknZOpFErFyniArGdLCghwURp2Z3ERGMqlNSLPEI/KIWI_Version";
       const NIGHT_URL = "https://opensheet.elk.sh/1X2iwknZOpFErFyniArGdLCghwURp2Z3ERGMqlNSLPEI/KIWI_Version";
 
-      // legend จุดเวร
+      // legend จุดเวร (ตาม Flex ตัวอย่าง)
       const POINT_LEGEND = [
-        "[1] จุดที่ 1 ประตูหน้า (เช้า - เย็น)",
-        "[2] จุดที่ 2 ประตูข้าง (เช้า - เย็น)",
-        "[3] โรงจอดรถหลังอาคาร 6",
-        "[4] โรงจอดรถหลังอาคาร 2"
+        "📍 จุดที่ 1 ประตูหน้า (เช้า - เย็น)",
+        "📍 จุดที่ 2 ประตูข้าง (เช้า - เย็น)",
+        "📍 จุดที่ 3 โรงจอดรถหลังอาคาร 6",
+        "📍 จุดที่ 4 โรงจอดรถหลังอาคาร 2"
       ];
 
       // ====== LIFF INIT ======
@@ -154,13 +149,12 @@
         }
       }
 
-      // ====== BUILD ONE BUBBLE FLEX FOR SELECTED DATE ======
+      // ====== BUILD ONE BUBBLE FLEX FOR SELECTED DATE (MATCH TEMPLATE) ======
       function buildFlexForDate(rows, monthBase, dayVal) {
         const dateCol  = monthBase + " วันที่ยืนเวร";
         const pointCol = monthBase + " ประจำจุด";
-        const targetDay = String(dayVal); // เปรียบเทียบเป็น string
+        const targetDay = String(dayVal);
 
-        // เก็บ row ที่ตรงวันที่ก่อน แล้วค่อยไล่เลข 1.,2.,3,...
         const matches = [];
 
         rows.forEach(row => {
@@ -183,11 +177,12 @@
             const pointVal = item.pointVal;
             const name     = r["ชื่อ-สกุล"] || "ไม่ระบุชื่อ";
             const position = r["ตำแหน่ง/กลุ่มสาระฯ"] || "";
-            const no = idx + 1; // 1., 2., 3. ตามลำดับ
+            const no = idx + 1;
             dutyLines.push(`${no}. ${name} (${position}) จุด ${pointVal}`);
           });
         }
 
+        // รายชื่อเวร
         const dutyBoxes = dutyLines.map(line => ({
           type: "text",
           text: line,
@@ -195,75 +190,98 @@
           wrap: true
         }));
 
-        // legend จุดเวร
-        const legendBoxes = POINT_LEGEND.map(line => ({
-          type: "text",
-          text: line,
-          size: "xxs",
-          wrap: true,
-          color: "#555555"
-        }));
+        // legend จุดเวร (📍) — first line margin md
+        const legendBoxes = POINT_LEGEND.map((line, idx) => {
+          const obj = {
+            type: "text",
+            text: line,
+            size: "sm",
+            wrap: true
+          };
+          if (idx === 0) obj.margin = "md";
+          return obj;
+        });
 
-        // ข้อความกำกับเพิ่มตามที่ Sir ขอ
+        // กติกาเวร 4 บรรทัด ตาม Flex ตัวอย่าง
         const noteBoxes = [
           {
             type: "text",
-            text: "- กำหนดลงเวลาปฏิบัติหน้าที่เวรแต่ละจุด ไม่เกิน 07.00 น. และปฏิบัติหน้าที่เวรตอนเย็น 15.30-16.00 น.",
-            size: "xxs",
-            wrap: true,
-            color: "#666666",
-            margin: "md"
+            text: "- กำหนดลงเวลาปฏิบัติหน้าที่เวรแต่ละจุด ไม่เกิน 07.00 น.",
+            margin: "md",
+            size: "sm",
+            wrap: true
           },
           {
             type: "text",
-            text: "- ปฏิบัติหน้าที่เวร แต่ละจุด จนถึงเวลา 07.50 น. จากนั้นให้ไปปฏิบัติครูที่ปรึกษาควบคุมดูแลแถวนักเรียนในกิจกรรมหน้าเสาธง",
-            size: "xxs",
-            wrap: true,
-            color: "#666666"
+            text: "- ปฏิบัติหน้าที่เวร แต่ละจุด จนถึงเวลา 07.50 น. ",
+            size: "sm",
+            wrap: true
+          },
+          {
+            type: "text",
+            text: "- ปฏิบัติหน้าที่เวรตอนเย็น 15.30-16.00 น.",
+            size: "sm",
+            wrap: true
+          },
+          {
+            type: "text",
+            text: "- จากนั้นให้ไปปฏิบัติครูที่ปรึกษาควบคุมดูแลนักเรียน \nในกิจกรรมหน้าเสาธง",
+            size: "sm",
+            wrap: true
           }
         ];
 
         const headerText = `ตารางเวร วันที่ ${targetDay} ${monthBase}`;
 
-        // ONE bubble (not carousel)
+        // inner box contents = duty list + separator + legend + separator + rules
+        const innerContents = [
+          ...dutyBoxes,
+          {
+            type: "separator",
+            margin: "md"
+          },
+          ...legendBoxes,
+          {
+            type: "separator",
+            margin: "md"
+          },
+          ...noteBoxes
+        ];
+
+        // FLEX BUBBLE EXACTLY LIKE GIVEN TEMPLATE
         const bubble = {
           type: "bubble",
-          size: "mega",
+          size: "giga",
           body: {
             type: "box",
             layout: "vertical",
-            spacing: "sm",
+            paddingAll: "16px",
             contents: [
               {
                 type: "text",
                 text: headerText,
                 weight: "bold",
-                size: "md",
+                size: "lg",
+                align: "center",
                 wrap: true
+              },
+              {
+                type: "separator",
+                margin: "md"
               },
               {
                 type: "box",
                 layout: "vertical",
+                margin: "md",
                 spacing: "xs",
-                contents: [
-                  // รายชื่อเวร
-                  ...dutyBoxes,
-                  // เส้นคั่นก่อน legend + กติกา
-                  {
-                    type: "separator",
-                    margin: "md"
-                  },
-                  // legend จุดเวร
-                  ...legendBoxes,
-                  {
-                    type: "separator",
-                    margin: "md"
-                  },                  
-                  // กติกาเวร
-                  ...noteBoxes
-                ]
+                contents: innerContents
               }
             ]
+          },
+          styles: {
+            body: {
+              backgroundColor: "#FFFFFF"
+            }
           }
         };
 
