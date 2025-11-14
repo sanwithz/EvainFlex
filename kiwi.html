@@ -167,6 +167,16 @@
           matches.push({ row, pointVal });
         });
 
+        // 👉 SORT BY pointVal: 1, 2, 3, 4
+        matches.sort((a, b) => {
+          const pa = parseInt(a.pointVal, 10);
+          const pb = parseInt(b.pointVal, 10);
+          if (isNaN(pa) && isNaN(pb)) return 0;
+          if (isNaN(pa)) return 1;
+          if (isNaN(pb)) return -1;
+          return pa - pb;
+        });
+
         const dutyLines = [];
 
         if (matches.length === 0) {
