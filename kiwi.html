@@ -106,6 +106,14 @@
       const DAY_URL   = "https://opensheet.elk.sh/1X2iwknZOpFErFyniArGdLCghwURp2Z3ERGMqlNSLPEI/KIWI_Version";
       const NIGHT_URL = "https://opensheet.elk.sh/1X2iwknZOpFErFyniArGdLCghwURp2Z3ERGMqlNSLPEI/KIWI_Version";
 
+      // legend จุดเวร
+      const POINT_LEGEND = [
+        "[1] จุดที่ 1 ประตูหน้า (เช้า - เย็น)",
+        "[2] จุดที่ 2 ประตูข้าง (เช้า - เย็น)",
+        "[3] โรงจอดรถหลังอาคาร 6",
+        "[4] โรงจอดรถหลังอาคาร 2"
+      ];
+
       // ====== LIFF INIT ======
       async function initLiff() {
         try {
@@ -152,7 +160,8 @@
         const pointCol = monthBase + " ประจำจุด";
         const targetDay = String(dayVal); // เปรียบเทียบเป็น string
 
-        const dutyLines = [];
+        // เก็บ row ที่ตรงวันที่ก่อน แล้วค่อยไล่เลข 1.,2.,3,...
+        const matches = [];
 
         rows.forEach(row => {
           const dateVal  = row[dateCol];
@@ -161,16 +170,22 @@
           if (!dateVal || dateVal === "-" || !pointVal || pointVal === "-") return;
           if (String(dateVal) !== targetDay) return;
 
-          const number   = row["ที่"] || "";
-          const name     = row["ชื่อ-สกุล"] || "ไม่ระบุชื่อ";
-          const position = row["ตำแหน่ง/กลุ่มสาระฯ"] || "";
-
-          const prefix = number ? number + ". " : "";
-          dutyLines.push(`${prefix}${name} (${position}) จุด ${pointVal}`);
+          matches.push({ row, pointVal });
         });
 
-        if (dutyLines.length === 0) {
+        const dutyLines = [];
+
+        if (matches.length === 0) {
           dutyLines.push("ไม่มีผู้ปฏิบัติหน้าที่เวรในวันนี้");
+        } else {
+          matches.forEach((item, idx) => {
+            const r = item.row;
+            const pointVal = item.pointVal;
+            const name     = r["ชื่อ-สกุล"] || "ไม่ระบุชื่อ";
+            const position = r["ตำแหน่ง/กลุ่มสาระฯ"] || "";
+            const no = idx + 1; // 1., 2., 3. ตามลำดับ
+            dutyLines.push(`${no}. ${name} (${position}) จุด ${pointVal}`);
+          });
         }
 
         const dutyBoxes = dutyLines.map(line => ({
@@ -178,6 +193,15 @@
           text: line,
           size: "sm",
           wrap: true
+        }));
+
+        // legend จุดเวร
+        const legendBoxes = POINT_LEGEND.map(line => ({
+          type: "text",
+          text: line,
+          size: "xxs",
+          wrap: true,
+          color: "#555555"
         }));
 
         // ข้อความกำกับเพิ่มตามที่ Sir ขอ
@@ -199,7 +223,7 @@
           }
         ];
 
-        const headerText = `ตารางเวร ${monthBase} วันที่ ${targetDay}`;
+        const headerText = `ตารางเวร วันที่ ${targetDay} ${monthBase}`;
 
         // ONE bubble (not carousel)
         const bubble = {
@@ -218,15 +242,20 @@
                 wrap: true
               },
               {
-                type: "separator",
-                margin: "sm"
-              },
-              {
                 type: "box",
                 layout: "vertical",
                 spacing: "xs",
                 contents: [
+                  // รายชื่อเวร
                   ...dutyBoxes,
+                  // เส้นคั่นก่อน legend + กติกา
+                  {
+                    type: "separator",
+                    margin: "md"
+                  },
+                  // legend จุดเวร
+                  ...legendBoxes,
+                  // กติกาเวร
                   ...noteBoxes
                 ]
               }
